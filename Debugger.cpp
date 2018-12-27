@@ -842,6 +842,9 @@ void CpuDebugger::put_hex_byte_gdb(unsigned char n)
 
 void CpuDebugger::put_dec_short_num_gdb(unsigned short i, bool leading)
 {
+	if (!leading && i == 0)
+		put_char_gdb('0');
+
 	bool has_printed = leading;
 	for (short count = 4; count >= 0; count--)
 	{

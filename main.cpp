@@ -90,15 +90,14 @@ static bool Trap(ExceptionState *pState)
 	case TRAP_PRINT_STRING:
 		g_debugger.put_string_gdb((char *)pState->d[1]);
 		break;
+	case DEBUGGER_UPDATE:
+		g_cpu.SetState(pState);
+		g_debugger.DebuggerUpdate(CpuDebugger::kTrapUpdate);
+		break;
 	default:
+		return false;
 		break;
 	}
-
-	if (pState->d[0] != DEBUGGER_UPDATE)
-		return false;
-
-	g_cpu.SetState(pState);
-	g_debugger.DebuggerUpdate(CpuDebugger::kTrapUpdate);
 
 	return true;
 }
