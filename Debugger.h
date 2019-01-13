@@ -27,6 +27,8 @@ class VirtualMemory
 public:
 	bool Write(bool isSupervisor, bool isCode, unsigned int dest, void *pSource, unsigned int size);
 	bool Read(bool isSupervisor, bool isCode, void *pDest, unsigned int source, unsigned int size);
+
+	bool m_inhibitAccess;
 };
 
 //increase this if you want more breakpoints

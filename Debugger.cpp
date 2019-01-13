@@ -174,7 +174,7 @@ bool VirtualMemory::Write(bool isSupervisor, bool isCode, unsigned int dest, voi
 	ASSERT(!isSupervisor);
 
 	//todo change start point
-	if ((dest >= (unsigned int)RAM_BASE) && ((dest + size) <= ((unsigned int)RAM_BASE + (unsigned int)RAM_SIZE)))
+	if (((dest >= (unsigned int)RAM_BASE) && ((dest + size) <= ((unsigned int)RAM_BASE + (unsigned int)RAM_SIZE))) || !m_inhibitAccess)
 	{
 		memcpy((void *)dest, pSource, size);
 
@@ -193,7 +193,8 @@ bool VirtualMemory::Read(bool isSupervisor, bool isCode, void *pDest, unsigned i
 
 	//todo change start point
 	if (((source >= (unsigned int)RAM_BASE) && ((source + size) <= ((unsigned int)RAM_BASE + (unsigned int)RAM_SIZE)))
-			|| ((source >= (unsigned int)ROM_BASE) && ((source + size) <= ((unsigned int)ROM_BASE + (unsigned int)ROM_SIZE))))
+			|| ((source >= (unsigned int)ROM_BASE) && ((source + size) <= ((unsigned int)ROM_BASE + (unsigned int)ROM_SIZE)))
+			|| !m_inhibitAccess)
 	{
 		memcpy(pDest, (void *)source, size);
 
@@ -261,7 +262,7 @@ void CpuDebugger::DebuggerUpdate(Reason r)
 				strcpy(response, "S08");			//sigfpe
 				break;
 			case kBusError:
-				strcpy(response, "S07");			//sigbus
+				strcpy(response, "S0A");			//sigbus
 				break;
 			default:
 				ASSERT(!"unknown signal");

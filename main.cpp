@@ -13,59 +13,18 @@
 static const unsigned int s_userStackSize = 4096;
 unsigned char g_userStack[s_userStackSize];
 
-//////////////
-
-static void DebuggerUpdate_User(void)
-{
-	trap0(DEBUGGER_UPDATE);
-}
 
 //////////
-
-static int f(int n)
-{
-	DebuggerUpdate_User();
-
-	if ( n == 0 )
-		return 0;
-	else if ( n == 1 )
-		return 1;
-	else
-		return ( f(n-1) + f(n-2) );
-}
-
-static const int max_fib = 0x30;
-
-static void do_fib(void)
-{
-	int n, i = 0, c;
-
-	n = max_fib;
-
-	for ( c = 1 ; c <= n ; c++ )
-	{
-		put_hex_num_user(c);
-		put_char_user(' ');
-		put_hex_num_user(f(i));
-		i++;
-
-		put_char_user('\n');
-	}
-}
 
 void func_in_user_mode(void)
 {
 	put_string_user("in user mode\n");
-
-//	do_fib();
 
 	while (1)
 		trap0(DEBUGGER_UPDATE);
 }
 
 //////////
-
-
 
 static Cpu g_cpu;
 static VirtualMemory g_vMem;
@@ -102,6 +61,50 @@ static bool Trap(ExceptionState *pState)
 	return true;
 }
 
+static void DumpAddrBusState(ExceptionState *pState)
+{
+	unsigned short *pOurState = (unsigned short *)pState;
+	g_debugger.put_string_gdb("function code\t\t"); g_debugger.put_hex_num_gdb(pOurState[32] & 7); g_debugger.put_char_gdb('\n');
+
+	if (pOurState[32] & 8)
+		g_debugger.put_string_gdb("instruction\n");
+	else
+		g_debugger.put_string_gdb("not instruction\n");
+
+	if (pOurState[32] & 16)
+		g_debugger.put_string_gdb("read\n");
+	else
+		g_debugger.put_string_gdb("write\n");
+
+	g_debugger.put_string_gdb("access addr\t\t"); g_debugger.put_hex_num_gdb((pOurState[33] << 16) | pOurState[34]); g_debugger.put_char_gdb('\n');
+	g_debugger.put_string_gdb("instruction reg\t\t"); g_debugger.put_hex_num_gdb(pOurState[35]); g_debugger.put_char_gdb('\n');
+}
+
+static void DumpExceptionState(ExceptionState *pState)
+{
+	unsigned int *pOurState = (unsigned int *)pState;
+
+	g_debugger.put_string_gdb("our state\n");
+
+	for (unsigned int count = 0; count < 16; count++)
+	{
+		g_debugger.put_hex_num_gdb(pOurState[count]);
+		g_debugger.put_char_gdb('\n');
+
+		for (volatile int i = 0; i < 1000; i++);
+	}
+
+	g_debugger.put_string_gdb("cpu state\n");
+
+	for (unsigned int count = 16; count < 16 + 4; count++)
+	{
+		g_debugger.put_hex_num_gdb(pOurState[count]);
+		g_debugger.put_char_gdb('\n');
+
+		for (volatile int i = 0; i < 1000; i++);
+	}
+}
+
 static void Trace(ExceptionState *pState)
 {
 	g_cpu.SetState(pState);
@@ -126,6 +129,44 @@ static void DivZero(ExceptionState *pState)
 	g_debugger.DebuggerUpdate(CpuDebugger::kDivZero);
 }
 
+//not sure what to do here
+static void Misc(ExceptionState *pState)
+{
+	g_debugger.put_string_gdb("MISC EXCEPTION\n");
+	DumpExceptionState(pState);
+
+	g_cpu.SetState(pState);
+	g_debugger.DebuggerUpdate(CpuDebugger::kIllegalException);
+}
+
+static void Addr(ExceptionState *pState)
+{
+	g_debugger.put_string_gdb("ADDR EXCEPTION\n");
+	DumpExceptionState(pState);
+	DumpAddrBusState(pState);
+
+	//move the state to where we expect it
+	*pState->GetSr() = *pState->GetGroup0Sr();
+	*pState->GetPc() = *pState->GetGroup0Pc();
+
+	g_cpu.SetState(pState);
+	g_debugger.DebuggerUpdate(CpuDebugger::kBusError);
+}
+
+static void Bus(ExceptionState *pState)
+{
+	g_debugger.put_string_gdb("BUS EXCEPTION\n");
+	DumpExceptionState(pState);
+	DumpAddrBusState(pState);
+
+	//move the state to where we expect it
+	*pState->GetSr() = *pState->GetGroup0Sr();
+	*pState->GetPc() = *pState->GetGroup0Pc();
+
+	g_cpu.SetState(pState);
+	g_debugger.DebuggerUpdate(CpuDebugger::kBusError);
+}
+
 extern "C" void _start(void *pLoadPoint)
 {
 	put_string("in loaded image\n");
@@ -139,6 +180,12 @@ extern "C" void _start(void *pLoadPoint)
 	pHooks->IllegalInst = &Illegal;
 	pHooks->DivZero = &DivZero;
 
+	//not sure
+	pHooks->MiscTrap = &Misc;
+	pHooks->AddrError = &Addr;
+	pHooks->BusError = &Bus;
+
+	g_vMem.m_inhibitAccess = true;
 	g_debugger.Init(&g_cpu, &g_vMem);
 
 	struct FullState
