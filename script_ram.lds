@@ -6,7 +6,9 @@ SECTIONS
 /*  . = 0x100100;*/
 /* big daddy pro */
 /*	. = 0x400100;*/
-	. = 0x800100;
+/*	. = 0x800100;*/
+/* fpga 68008 */
+	. = 0x100100;
   .text : { *(.text*) }
   .rodata : { *(.rodata*) }
   
