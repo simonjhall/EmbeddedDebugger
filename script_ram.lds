@@ -9,7 +9,7 @@ SECTIONS
 /* dynamic daddy */
 /*	. = 0x800100;*/
 /* fpga 68008 */
-	. = 0x100100;
+	. = 0x10100;
   .text : { *(.text*) }
   .rodata : { *(.rodata*) }
   
