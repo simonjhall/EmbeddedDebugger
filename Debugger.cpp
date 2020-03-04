@@ -194,6 +194,9 @@ bool VirtualMemory::Read(bool isSupervisor, bool isCode, void *pDest, unsigned i
 	//todo change start point
 	if (((source >= (unsigned int)RAM_BASE) && ((source + size) <= ((unsigned int)RAM_BASE + (unsigned int)RAM_SIZE)))
 			|| ((source >= (unsigned int)ROM_BASE) && ((source + size) <= ((unsigned int)ROM_BASE + (unsigned int)ROM_SIZE)))
+#ifdef RAM2_BASE
+			|| ((source >= (unsigned int)RAM2_BASE) && ((source + size) <= ((unsigned int)RAM2_BASE + (unsigned int)RAM2_SIZE)))
+#endif
 			|| !m_inhibitAccess)
 	{
 		memcpy(pDest, (void *)source, size);
