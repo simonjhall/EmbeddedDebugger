@@ -9,7 +9,8 @@ SECTIONS
 /* dynamic daddy */
 /*	. = 0x800100;*/
 /* fpga 68008 */
-	. = 0x10100;
+/* needs to match LOAD_POINT */
+	. = 0x10000100;
   .text : { *(.text*) }
   .rodata : { *(.rodata*) }
   

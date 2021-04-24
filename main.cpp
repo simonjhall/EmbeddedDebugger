@@ -10,7 +10,7 @@
 #include "inter_process.h"
 #include "Debugger.h"
 
-static const unsigned int s_userStackSize = 4096;
+static const unsigned int s_userStackSize = 6 * 1024;
 unsigned char g_userStack[s_userStackSize];
 
 

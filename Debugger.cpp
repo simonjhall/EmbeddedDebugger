@@ -174,7 +174,11 @@ bool VirtualMemory::Write(bool isSupervisor, bool isCode, unsigned int dest, voi
 	ASSERT(!isSupervisor);
 
 	//todo change start point
-	if (((dest >= (unsigned int)RAM_BASE) && ((dest + size) <= ((unsigned int)RAM_BASE + (unsigned int)RAM_SIZE))) || !m_inhibitAccess)
+	if (((dest >= (unsigned int)RAM_BASE) && ((dest + size) <= ((unsigned int)RAM_BASE + (unsigned int)RAM_SIZE)))
+#ifdef RAM2_BASE
+			|| ((dest >= (unsigned int)RAM2_BASE) && ((dest + size) <= ((unsigned int)RAM2_BASE + (unsigned int)RAM2_SIZE)))
+#endif
+			|| !m_inhibitAccess)
 	{
 		memcpy((void *)dest, pSource, size);
 
@@ -609,6 +613,57 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 					failure = true;
 					break;
 				}
+			}
+		}
+		
+		if (failure)
+			strcpy(response, "E00");
+		else
+			strcpy(response, "OK");
+	}
+
+	//write memory (binary)
+	if (packet[0] == 'X')
+	{
+		char* colon = strchr(packet, ':');
+		unsigned int write_address, write_length;
+		StringToHex(StringToHex(packet + 1, write_address) + 1, write_length);
+		
+		PRINT_DEBUG("binary writing %d bytes to %08x\n", write_length, write_address);
+
+		bool failure = false;
+		bool control = false;
+		unsigned int read_pos = 0;
+
+		{
+			for (unsigned int count = 0; count < write_length; /* */)
+			{
+				unsigned int data_i;
+				data_i = colon[1 + read_pos++];		//advance read position
+
+				unsigned char b = data_i;
+
+				//The binary data representation uses 7d (ASCII ‘}’) as an escape character. Any escaped byte is transmitted as the escape character followed by the original character XORed with 0x20.
+				if (b == 0x7d)
+				{
+					control = true;
+					continue;
+				}
+
+				if (control)
+				{
+					b = b ^ 0x20;
+					control = false;
+				}
+
+				if (!m_pVmem->Write(m_pCpu->IsSupervisorMode(), false, write_address + count, &b, 1))
+				{
+					failure = true;
+					break;
+				}
+
+				//character written - move to next dest byte
+				count++;
 			}
 		}
 		
