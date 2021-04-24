@@ -433,14 +433,6 @@ int CpuDebugger::ReadPacket(char* buffer)
 int CpuDebugger::HandlePacket(char* packet, char* response)
 {
 	response[0] = 0;
-//	memset(response, 0, MAX_PACKET_LENGTH);
-	
-	/*//it's a ctrl-c
-	if (packet[0] == 3)
-	{
-		PRINT_DEBUG("CTRL-C\n");
-		strcpy(response, "S01");
-	}*/
 	
 	if (packet[0] == '?')
 		strcpy(response, "S01");
@@ -460,7 +452,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 			{
 				unsigned char c = (d >> (b * 8)) & 0xff;
 
-//				sprintf(pRegResponse, "%02x", c);
 				CharToHex(pRegResponse, c);
 				pRegResponse += 2;
 			}
@@ -473,23 +464,19 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 			{
 				unsigned char c = (d >> (b * 8)) & 0xff;
 
-//				sprintf(pRegResponse, "%02x", c);
 				CharToHex(pRegResponse, c);
 				pRegResponse += 2;
 			}
 		}
-		//ps, whatever that is
-		//let's put the status register in it
+		//ps: status register in it
 		{
 			for (int b = 3; b >= 0; b--)
 			{
 				unsigned int sr = m_pCpu->GetSR();
 				unsigned char c = (sr >> (b * 8)) & 0xff;
 
-//				sprintf(pRegResponse, "%02x", c);
 				CharToHex(pRegResponse, c);
 				pRegResponse += 2;
-				//printf("reg %d, byte %d, value %02x\n", count, b, (unsigned char)m_pCpu->ReadRegisterByte(count, b));
 			}
 		}
 		//pc
@@ -500,10 +487,8 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 			{
 				unsigned char c = (d >> (b * 8)) & 0xff;
 
-//				sprintf(pRegResponse, "%02x", c);
 				CharToHex(pRegResponse, c);
 				pRegResponse += 2;
-				//printf("reg %d, byte %d, value %02x\n", count, b, (unsigned char)m_pCpu->ReadRegisterByte(count, b));
 			}
 		}
 		//fp registers
@@ -560,7 +545,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 	if (packet[0] == 'm')
 	{
 		unsigned int read_address, read_length;
-//		sscanf(packet + 1, "%x,%x", &read_address, &read_length);
 		StringToHex(StringToHex(packet + 1, read_address) + 1, read_length);		//hopefully no 0x
 		
 		PRINT_DEBUG("reading %d bytes from %08x\n", read_length, read_address);
@@ -578,7 +562,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 					break;
 				}
 
-//				sprintf(response + count * 2, "%02x", b);
 				CharToHex(response + count * 2, b);
 			}
 
@@ -592,7 +575,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 	{
 		char* colon = strchr(packet, ':');
 		unsigned int write_address, write_length;
-//		sscanf(packet + 1, "%x,%x", &write_address, &write_length);
 		StringToHex(StringToHex(packet + 1, write_address) + 1, write_length);
 		
 		PRINT_DEBUG("writing %d bytes to %08x\n", write_length, write_address);
@@ -603,7 +585,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 			for (unsigned int count = 0; count < write_length; count++)
 			{
 				unsigned int data_i;
-//				sscanf(colon + 1 + count * 2, "%02x", &data_i);
 				data_i = StringToHex2c(colon + 1 + count * 2);
 
 				unsigned char b = data_i;
@@ -680,7 +661,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 		unsigned int b1, b2, b3, b4;
 		unsigned int val;
 		
-//		sscanf(packet, "P%2x=%2x%2x%2x%2x", &reg, &b1, &b2, &b3, &b4);
 		reg = StringToHex2c(packet + 1);
 
 		//find the = character...will be either byte 2 or 3
@@ -747,7 +727,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 	if (strstr(packet, "Z0") == packet)
 	{
 		unsigned int addr;
-//		sscanf(packet, "Z0,%x,4", &addr);
 		StringToHex(packet + 3, addr);
 		
 		PRINT_DEBUG("set breakpoint at %08x\n", addr);
@@ -765,7 +744,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 	if (strstr(packet, "z0") == packet)
 	{
 		unsigned int addr;
-//		sscanf(packet, "z0,%x,4", &addr);
 		StringToHex(packet + 3, addr);
 		
 		PRINT_DEBUG("clear breakpoint at %08x\n", addr);
