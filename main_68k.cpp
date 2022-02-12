@@ -32,22 +32,28 @@ static CpuDebugger g_debugger;
 
 static bool Trap(ExceptionState *pState)
 {
-	switch (pState->d[0])
+	unsigned long call, a0, a1;
+_
+	call = pState->d[0];
+	a0 = pState->d[1];
+	a1 = pState->d[2];
+
+	switch (call)
 	{
 	case TRAP_PRINT_CHAR:
-		g_debugger.put_char_gdb(pState->d[1]);
+		g_debugger.put_char_gdb(a0);
 		break;
 	case TRAP_PRINT_HEX_NUM:
-		g_debugger.put_hex_num_gdb(pState->d[1]);
+		g_debugger.put_hex_num_gdb(a0);
 		break;
 	case TRAP_PRINT_HEX_BYTE:
-		g_debugger.put_hex_byte_gdb(pState->d[1]);
+		g_debugger.put_hex_byte_gdb(a0);
 		break;
 	case TRAP_PRINT_DEC_SHORT_NUM:
-		g_debugger.put_dec_short_num_gdb(pState->d[1], pState->d[2]);
+		g_debugger.put_dec_short_num_gdb(a0, a1);
 		break;
 	case TRAP_PRINT_STRING:
-		g_debugger.put_string_gdb((char *)pState->d[1]);
+		g_debugger.put_string_gdb((char *)a0);
 		break;
 	case DEBUGGER_UPDATE:
 		g_cpu.SetState(pState);
@@ -174,6 +180,7 @@ extern "C" void _start(void *pLoadPoint)
 	put_string("instruction cache enabled\n");
 
 	Hooks *pHooks = GetHooks();
+
 	pHooks->Trap = &Trap;
 	pHooks->Trace = &Trace;
 	pHooks->Auto1 = &Interrupt;

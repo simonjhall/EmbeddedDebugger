@@ -1,0 +1,37 @@
+PREFIX = riscv32-unknown-linux-gnu-
+ARGS = -fno-rtti -fno-exceptions -march=rv32im -mabi=ilp32 -O3 -g
+# ARGS = -fno-rtti -fno-exceptions -march=rv64imac -mabi=lp64  -O3 -g
+
+ARGS += -I ../shared68k -DMACHINE_MODE -Wall
+
+.SECONDARY:
+
+all: debugger.bin header.bin
+
+clean:
+	rm -f *.bin *.o *.elf *.a args
+
+%.bin: %.elf
+	$(PREFIX)objcopy -O binary $^ $@
+
+%.o: %.cpp $(HEADERS) Makefile
+	$(PREFIX)c++ $< -c -o $@ -g -std=c++14 -Wall $(ARGS)
+
+%.o: %.S
+	$(PREFIX)c++ $< -c -o $@ -g
+
+../shared68k/shared.a:
+	$(MAKE) -C ../shared68k
+
+debugger.elf: main_risc.o Debugger.o ../shared68k/shared.a
+	$(PREFIX)c++ $^ -o $@ -g -static -nostartfiles -L../shared68k -l:shared.a -Wl,-Tscript_ram.lds
+
+debugger.bin: debugger.elf
+	$(PREFIX)objcopy $^ -O binary $@
+
+args: args.cpp
+	c++ $< -o $@ -g -std=c++14 -Wall
+
+header.bin: debugger.elf debugger.bin args
+	./args beefcafe `stat -f "%z" debugger.bin` `$(PREFIX)readelf -h debugger.elf |grep Entry| sed 's/^.*0x//g'` `crc32 debugger.bin`
+
