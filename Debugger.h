@@ -3,6 +3,7 @@
 
 #include "inter_process.h"
 
+#ifdef __m68k__
 class Cpu
 {
 public:
@@ -10,11 +11,11 @@ public:
 
 	unsigned int &GetAx(unsigned int r);
 	unsigned int &GetDx(unsigned int r);
-	unsigned int GetSR(void);
-	unsigned int GetPC(void);
+	unsigned long GetSR(void);
+	unsigned long GetPC(void);
 
-	void SetSR(unsigned int);
-	void SetPC(unsigned int);
+	void SetSR(unsigned long);
+	void SetPC(unsigned long);
 
 	bool IsSupervisorMode(void);
 
@@ -22,11 +23,34 @@ private:
 	ExceptionState *m_pState;
 };
 
+#elif __riscv
+
+class Cpu
+{
+public:
+	void SetState(ExceptionState *pState);
+
+	unsigned long &GetRx(unsigned int r);
+	unsigned long GetSR(void);
+	unsigned long GetPC(void);
+
+	void SetSR(unsigned long);
+	void SetPC(unsigned long);
+
+	bool IsSupervisorMode(void);
+
+private:
+	ExceptionState *m_pState;
+};
+
+#endif
+
+
 class VirtualMemory
 {
 public:
-	bool Write(bool isSupervisor, bool isCode, unsigned int dest, void *pSource, unsigned int size);
-	bool Read(bool isSupervisor, bool isCode, void *pDest, unsigned int source, unsigned int size);
+	bool Write(bool isSupervisor, bool isCode, unsigned long dest, void *pSource, unsigned long size);
+	bool Read(bool isSupervisor, bool isCode, void *pDest, unsigned long source, unsigned long size);
 
 	bool m_inhibitAccess;
 };
@@ -69,14 +93,14 @@ private:
 	int PeekData(void);
 	void ChecksumPacket(char* packet, int length, char* checksum);
 
-	bool SetBreakpoint(unsigned int addr);
-	bool ClearBreakpoint(unsigned int addr);
+	bool SetBreakpoint(unsigned long addr);
+	bool ClearBreakpoint(unsigned long addr);
 	int NumBreakpoints(void);
 	
 	struct Breakpoint
 	{
-		unsigned int m_address;
-		unsigned short m_origInstruction;
+		unsigned long m_address;
+		unsigned int m_origInstruction;
 	} m_breakpoints[MAX_BREAKPOINTS];
 };
 
