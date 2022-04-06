@@ -1,5 +1,5 @@
-PREFIX = riscv32-unknown-linux-gnu-
-ARGS = -fno-rtti -fno-exceptions -march=rv32im -mabi=ilp32 -O3 -g
+PREFIX=~/riscv-linux32/bin/riscv32-unknown-linux-gnu-
+ARGS = -fno-rtti -fno-exceptions -march=rv32im -mno-div -mabi=ilp32 -O3 -g
 # ARGS = -fno-rtti -fno-exceptions -march=rv64imac -mabi=lp64  -O3 -g
 
 ARGS += -I ../shared68k -DMACHINE_MODE -Wall
@@ -23,7 +23,7 @@ clean:
 ../shared68k/shared.a:
 	$(MAKE) -C ../shared68k
 
-debugger.elf: main_risc.o Debugger.o ../shared68k/shared.a
+debugger.elf: main_risc.o Debugger.o elf_load_risc.o ../shared68k/shared.a
 	$(PREFIX)c++ $^ -o $@ -g -static -nostartfiles -L../shared68k -l:shared.a -Wl,-Tscript_ram.lds
 
 debugger.bin: debugger.elf
