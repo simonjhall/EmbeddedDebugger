@@ -443,6 +443,90 @@ static void set_reg_full(uint32_t id, unsigned long val)
 }
 #endif
 
+static unsigned long amo_add(unsigned long original, unsigned long incoming)
+{
+	return original + incoming;
+}
+
+static unsigned long amo_and(unsigned long original, unsigned long incoming)
+{
+	return original & incoming;
+}
+
+static unsigned long amo_swap(unsigned long original, unsigned long incoming)
+{
+	return incoming;
+}
+
+static unsigned long amo_or(unsigned long original, unsigned long incoming)
+{
+	return original | incoming;
+}
+
+static unsigned long amo_xor(unsigned long original, unsigned long incoming)
+{
+	return original ^ incoming;
+}
+
+static unsigned long amo_min(unsigned long original, unsigned long incoming)
+{
+	return (long)original < (long)incoming ? original : incoming;
+}
+
+static unsigned long amo_minu(unsigned long original, unsigned long incoming)
+{
+	return original < incoming ? original : incoming;
+}
+
+static unsigned long amo_max(unsigned long original, unsigned long incoming)
+{
+	return (long)original > (long)incoming ? original : incoming;
+}
+
+static unsigned long amo_maxu(unsigned long original, unsigned long incoming)
+{
+	return original > incoming ? original : incoming;
+}
+
+static bool amo_op(unsigned int rd, unsigned int rs1, unsigned int rs2,
+	unsigned long (*op)(unsigned long, unsigned long), unsigned int size)
+{
+	uintptr_t pa;
+	//read and write
+	pa = get_reg(rs1);
+
+	if (size == 2)		//32-bit
+	{
+		/* when run on 32-bit
+		load a 32-bit value, op takes ulong (32-bit), get_reg returns 32-bit
+		result is 32-bit
+		set_reg32 sets a 32-bit value
+
+		when run on 64-bit
+		load a 32-bit value (zero-extend to 64-bit), op takes 64-bit, get_reg returns 64-bit
+		result is 64-bit, but truncated to 32-bit
+		set_reg32 sign-extends the truncated 32-bit result to 64-bit
+		*/
+		uint32_t original_value = *(uint32_t *)pa;
+		uint32_t new_value = op(original_value, get_reg(rs2));
+		set_reg32(rd, original_value);
+		*(uint32_t *)pa = new_value;
+	}
+	//rv64-only encoding
+#ifdef CONFIG_64BIT
+	else				//64-bit
+	{
+		uint64_t original_value = *(uint64_t *)pa;
+		uint64_t new_value = op(original_value, get_reg(rs2));
+		set_reg_full(rd, original_value);
+		*(uint64_t *)pa = new_value;
+	}
+#endif
+
+	return true;
+}
+
+uint64_t reservation_addr_pa;
 
 static void Illegal(ExceptionState *pState)
 {
@@ -617,7 +701,6 @@ static void Illegal(ExceptionState *pState)
 					}
 					break;				//break from op
 				}
-#if 0
 				//amo
 				case 0b0101111:
 				{
@@ -635,8 +718,7 @@ static void Illegal(ExceptionState *pState)
 						//AMOSWAP.W/D
 						case 0b00001:
 						{
-							ILL_INC(ill_amo_amoswap);
-							if (amo_op(pState, rd, rs1, rs2, &amo_swap, funct3))
+							if (amo_op(rd, rs1, rs2, &amo_swap, funct3))
 								fall_through = false;
 
 							break;		//break from this instruction
@@ -644,8 +726,7 @@ static void Illegal(ExceptionState *pState)
 						//AMOADD.W/D
 						case 0b00000:
 						{
-							ILL_INC(ill_amo_amoadd);
-							if (amo_op(pState, rd, rs1, rs2, &amo_add, funct3))
+							if (amo_op(rd, rs1, rs2, &amo_add, funct3))
 								fall_through = false;
 
 							break;		//break from this instruction
@@ -653,8 +734,7 @@ static void Illegal(ExceptionState *pState)
 						//AMOXOR.W/D
 						case 0b00100:
 						{
-							ILL_INC(ill_amo_amoxor);
-							if (amo_op(pState, rd, rs1, rs2, &amo_xor, funct3))
+							if (amo_op(rd, rs1, rs2, &amo_xor, funct3))
 								fall_through = false;
 
 							break;		//break from this instruction
@@ -662,8 +742,7 @@ static void Illegal(ExceptionState *pState)
 						//AMOAND.W/D
 						case 0b01100:
 						{
-							ILL_INC(ill_amo_amoand);
-							if (amo_op(pState, rd, rs1, rs2, &amo_and, funct3))
+							if (amo_op(rd, rs1, rs2, &amo_and, funct3))
 								fall_through = false;
 
 							break;		//break from this instruction
@@ -671,8 +750,39 @@ static void Illegal(ExceptionState *pState)
 						//AMOOR.W/D
 						case 0b01000:
 						{
-							ILL_INC(ill_amo_amoor);
-							if (amo_op(pState, rd, rs1, rs2, &amo_or, funct3))
+							if (amo_op(rd, rs1, rs2, &amo_or, funct3))
+								fall_through = false;
+
+							break;		//break from this instruction
+						}
+						//AMOMIN.W/D
+						case 0b10000:
+						{
+							if (amo_op(rd, rs1, rs2, &amo_min, funct3))
+								fall_through = false;
+
+							break;		//break from this instruction
+						}
+						//AMOMINU.W/D
+						case 0b11000:
+						{
+							if (amo_op(rd, rs1, rs2, &amo_minu, funct3))
+								fall_through = false;
+
+							break;		//break from this instruction
+						}
+						//AMOMAX.W/D
+						case 0b10100:
+						{
+							if (amo_op(rd, rs1, rs2, &amo_max, funct3))
+								fall_through = false;
+
+							break;		//break from this instruction
+						}
+						//AMOMAXU.W/D
+						case 0b11100:
+						{
+							if (amo_op(rd, rs1, rs2, &amo_maxu, funct3))
 								fall_through = false;
 
 							break;		//break from this instruction
@@ -680,97 +790,71 @@ static void Illegal(ExceptionState *pState)
 						//LR.W/D
 						case 0b00010:
 						{
-							ILL_INC(ill_amo_lr);
-
 							uintptr_t pa;
 							//read only
-							bool success = translate_va_pa(get_reg(rs1), false, true, false, &pa);
+							pa = get_reg(rs1);
 
-							if (success)
+							if (funct3 == 2)		//32-bit
 							{
-								if (funct3 == 2)		//32-bit
-								{
-									/* on 32-bit
-									load the 32-bit value
-									set_reg32 takes 32-bit input
-									on 64-bit
-									load the 32-bit value
-									set_reg32 takes 32-bit input
-									sign-extends to 64-bit
-									*/
-									set_reg32(rd, *(uint32_t *)pa);
-								}
+								/* on 32-bit
+								load the 32-bit value
+								set_reg32 takes 32-bit input
+								on 64-bit
+								load the 32-bit value
+								set_reg32 takes 32-bit input
+								sign-extends to 64-bit
+								*/
+								set_reg32(rd, *(uint32_t *)pa);
+							}
 #ifdef CONFIG_64BIT
-								else					//64-bit
-								{
-									set_reg_full(rd, *(uint64_t *)pa);
-								}
-#endif
-								reservation_addr_pa = pa;
-
-								fall_through = false;
-							}
-							else
+							else					//64-bit
 							{
-								//load page fault at va
-								csr_write(CSR_MTVAL, get_reg(rs1));
-								csr_write(CSR_MCAUSE, kMcauseNotInterrupt | TrapLoadPageFault);
-
-								//now fall through out of TrapIllegalIns
+								set_reg_full(rd, *(uint64_t *)pa);
 							}
+#endif
+							reservation_addr_pa = pa;
+
+							fall_through = false;
 							break;		//break from this instruction
 						}
 						//SC.W/D
 						case 0b00011:
 						{
-							ILL_INC(ill_amo_sc);
-
 							uintptr_t pa;
 							//write only
-							bool success = translate_va_pa(get_reg(rs1), false, false, true, &pa);
+							pa = get_reg(rs1);
 
-							if (success)
+							//SC.W conditionally writes a word in rs2 to the address in rs1:
+							//the SC.W succeeds only if the reservation is still valid and
+							//the reservation set contains the bytes being written.
+							//If the SC.W succeeds, the instruction writes the word in rs2
+							//to memory, and it writes zero to rd. If the SC.W fails,
+							//the instruction does not write to memory, and it writes a
+							//nonzero value to rd.
+
+							if (pa == reservation_addr_pa)
 							{
-								//SC.W conditionally writes a word in rs2 to the address in rs1:
-								//the SC.W succeeds only if the reservation is still valid and
-								//the reservation set contains the bytes being written.
-								//If the SC.W succeeds, the instruction writes the word in rs2
-								//to memory, and it writes zero to rd. If the SC.W fails,
-								//the instruction does not write to memory, and it writes a
-								//nonzero value to rd.
-
-								if (pa == reservation_addr_pa)
+								//success
+								if (funct3 == 2)		//32-bit
 								{
-									//success
-									if (funct3 == 2)		//32-bit
-									{
-										*(uint32_t *)pa = get_reg(rs2);
-									}
+									*(uint32_t *)pa = get_reg(rs2);
+								}
 #ifdef CONFIG_64BIT
-									else					//64-bit
-									{
-										*(uint64_t *)pa = get_reg(rs2);
-									}
+								else					//64-bit
+								{
+									*(uint64_t *)pa = get_reg(rs2);
+								}
 #endif
 
-									set_reg_full(rd, 0);
-								}
-								else	//failure
-									set_reg_full(rd, 1);
-
-								//token invalidation
-								reservation_addr_pa = -1;
-
-								fall_through = false;
+								set_reg_full(rd, 0);
 							}
-							else
-							{
-								//store page fault at va
-								csr_write(CSR_MTVAL, get_reg(rs1));
-								csr_write(CSR_MCAUSE, kMcauseNotInterrupt | TrapStorePageFault);
+							else	//failure
+								set_reg_full(rd, 1);
 
-								//now fall through out of TrapIllegalIns
-							}
+							//token invalidation
+							reservation_addr_pa = -1;
+
+							fall_through = false;
 							break;		//break from this instruction
 						}
 						default:
@@ -778,7 +862,6 @@ static void Illegal(ExceptionState *pState)
 					}
 					break;				//break from amo
 				}
-#endif
 				default:
 					break;				//did not decode this class
 			}
