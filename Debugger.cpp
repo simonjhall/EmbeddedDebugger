@@ -161,7 +161,6 @@ unsigned long &Cpu::GetRx(unsigned int r)
 bool Cpu::IsSupervisorMode(void)
 {
 	unsigned long mstatus = *m_pState->GetSr();
-
 	//assuming supervisor = !user
 	return ((mstatus >> 11) & 3) != 0;
 }
@@ -461,7 +460,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 	if (strcmp(packet, "g") == 0)
 	{
 		PRINT_DEBUG("reading registers\n");
-
 		char *pRegResponse = response;
 #ifdef __m68k__
 		for (int count = 0; count < 8; count++)
@@ -709,7 +707,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 		unsigned long b5, b6, b7, b8;
 #endif
 		unsigned long val;
-
 		reg = StringToHex2c(packet + 1);
 
 		//find the = character...will be either byte 2 or 3
@@ -739,7 +736,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 #error unexpected xlen
 #endif
 #endif
-
 #ifdef __m68k__
 		if (reg == 17)
 		{
@@ -774,7 +770,6 @@ int CpuDebugger::HandlePacket(char* packet, char* response)
 		{
 			PRINT_DEBUG("setting PC to %x\n", val);
 			m_pCpu->SetPC(val);
-
 			strcpy(response, "OK");
 		}
 		else if (reg < 32)
@@ -852,7 +847,6 @@ bool CpuDebugger::SetBreakpoint(unsigned long addr)
 	const int length = 4;
 	static const unsigned int new_inst = 0b00000000000100000000000001110011;
 #endif
-
 	//check it's not been set already
 	for (int count = 0; count < MAX_BREAKPOINTS; count++)
 		if (m_breakpoints[count].m_address == addr)
@@ -895,7 +889,6 @@ bool CpuDebugger::ClearBreakpoint(unsigned long addr)
 #elif __riscv
 	const int length = 4;
 #endif
-
 	for (int count = 0; count < MAX_BREAKPOINTS; count++)
 		if (m_breakpoints[count].m_address == addr)
 		{
@@ -905,7 +898,6 @@ bool CpuDebugger::ClearBreakpoint(unsigned long addr)
 
 	if (slot == -1)
 		return false;
-
 	if (m_pVmem->Write(false, true, addr, &m_breakpoints[slot].m_origInstruction, length))
 	{
 		m_breakpoints[slot].m_address = (unsigned long)-1;
