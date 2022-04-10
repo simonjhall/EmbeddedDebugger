@@ -14,14 +14,14 @@ clean:
 %.bin: %.elf
 	$(PREFIX)objcopy -O binary $^ $@
 
-%.o: %.cpp $(HEADERS) Makefile
+%.o: %.cpp $(HEADERS) Makefile_riscv
 	$(PREFIX)c++ $< -c -o $@ -g -std=c++14 -Wall $(ARGS)
 
 %.o: %.S
 	$(PREFIX)c++ $< -c -o $@ -g
 
 ../shared68k/shared.a:
-	$(MAKE) -C ../shared68k
+	$(MAKE) -C ../shared68k -f Makefile_riscv
 
 debugger.elf: main_risc.o Debugger.o elf_load_risc.o ../shared68k/shared.a
 	$(PREFIX)c++ $^ -o $@ -g -static -nostartfiles -L../shared68k -l:shared.a -Wl,-Tscript_ram.lds
