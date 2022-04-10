@@ -130,12 +130,12 @@ unsigned int &Cpu::GetDx(unsigned int r)
 	return m_pState->d[r];
 }
 
-unsigned int Cpu::GetSR(void)
+unsigned long Cpu::GetSR(void)
 {
 	return *m_pState->GetSr();
 }
 
-void Cpu::SetSR(unsigned int sr)
+void Cpu::SetSR(unsigned long sr)
 {
 	*m_pState->GetSr() = sr;
 }

@@ -1,0 +1,39 @@
+PREFIX=m68k-linux-gnu-
+ARGS = -fno-rtti -fno-exceptions -mcpu=68040  -O3 -g
+
+ARGS += -I ../shared68k -DSUPERVISOR_MODE -Wall
+
+.SECONDARY:
+
+all: debugger.bin header.bin
+
+clean:
+	rm -f *.bin *.o *.elf *.a args
+
+%.bin: %.elf
+	$(PREFIX)objcopy -O binary $^ $@
+
+%.o: %.cpp $(HEADERS) Makefile_m68k
+	$(PREFIX)g++ $< -c -o $@ -g -std=c++14 -Wall $(ARGS)
+
+%.o: %.S
+	$(PREFIX)g++ $< -c -o $@ -g
+
+../shared68k/shared.a:
+	$(MAKE) -C ../shared68k -f Makefile_m68k
+
+debugger.elf: main_68k.o Debugger.o ../shared68k/shared.a
+	$(PREFIX)g++ $^ -o $@ -g -static -nostartfiles -L../shared68k -l:shared.a -Wl,-Tscript_ram.lds
+
+debugger.bin: debugger.elf
+	$(PREFIX)objcopy $^ -O binary $@
+
+args: args.cpp
+	g++ $< -o $@ -g -std=c++14 -Wall
+
+header.bin: debugger.elf debugger.bin args
+	#mac
+	./args beefcafe `stat -f "%z" debugger.bin` `$(PREFIX)readelf -h debugger.elf |grep Entry| sed 's/^.*0x//g'` `crc32 debugger.bin`
+	#linux
+	#./args beefcafe `stat -c "%s" debugger.bin` `$(PREFIX)readelf -h debugger.elf |grep Entry| sed 's/^.*0x//g'` `crc32 debugger.bin`
+

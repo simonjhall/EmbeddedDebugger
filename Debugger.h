@@ -63,7 +63,7 @@ class CpuDebugger
 public:
 	//make a debugger and pass it our CPU
 	void Init(Cpu* pCpu, VirtualMemory *pVmem);
-	
+
 	enum Reason
 	{
 		kNotRunning,
@@ -75,7 +75,7 @@ public:
 		kBusError,
 	};
 	void DebuggerUpdate(Reason);
-	
+
 	////////////////////
 	void put_char_gdb(char c);
 	void put_hex_num_gdb(unsigned int n);
@@ -86,7 +86,7 @@ public:
 private:
 	Cpu *m_pCpu;
 	VirtualMemory *m_pVmem;
-	
+
 	int ReadPacket(char* buffer);
 	int HandlePacket(char* packet, char* response);
 	void SendResponse(const char* response);
@@ -96,7 +96,7 @@ private:
 	bool SetBreakpoint(unsigned long addr);
 	bool ClearBreakpoint(unsigned long addr);
 	int NumBreakpoints(void);
-	
+
 	struct Breakpoint
 	{
 		unsigned long m_address;

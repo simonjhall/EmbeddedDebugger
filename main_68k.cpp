@@ -33,7 +33,7 @@ static CpuDebugger g_debugger;
 static bool Trap(ExceptionState *pState)
 {
 	unsigned long call, a0, a1;
-_
+
 	call = pState->d[0];
 	a0 = pState->d[1];
 	a1 = pState->d[2];
