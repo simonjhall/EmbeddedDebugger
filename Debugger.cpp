@@ -2,7 +2,6 @@
 #define MAX_PACKET_LENGTH 2048
 
 #include "Debugger.h"
-#include "common.h"
 #include "uart.h"
 #include "misc_asm.h"
 

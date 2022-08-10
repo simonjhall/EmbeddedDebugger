@@ -1,6 +1,7 @@
 #ifndef DEBUGGER_H_
 #define DEBUGGER_H_
 
+#include "common.h"
 #include "inter_process.h"
 
 #ifdef __m68k__

@@ -6,6 +6,7 @@
  */
 
 #include "uart.h"
+#include "common.h"
 #include "misc_asm.h"
 #include "inter_process.h"
 #include "Debugger.h"
