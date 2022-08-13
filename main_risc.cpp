@@ -931,14 +931,14 @@ extern "C" void _start(void *pLoadPoint)
 	struct FullState
 	{
 		ExceptionState m_normal;
-		unsigned long m_pc;
 	} initial;
 
 	for (int count = 0; count < 32; count++)
 		initial.m_normal.regs_int[count] = 0;
 
 	initial.m_normal.sp = 0;
-	initial.m_pc = 0;
+	initial.m_normal.pc = 0;
+	initial.m_normal.status = 0;			//set mstatus to zero include mpp to "user"
 
 	g_cpu.SetState(&initial.m_normal);
 

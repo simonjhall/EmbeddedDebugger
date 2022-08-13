@@ -198,7 +198,7 @@ extern "C" void _start(void *pLoadPoint)
 	struct FullState
 	{
 		ExceptionState m_normal;
-		unsigned short m_sr;
+		unsigned short m_sr;			//these fields are used by the functions in ExceptionState
 		unsigned int m_pc;
 	} initial;
 
