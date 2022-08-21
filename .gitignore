@@ -1,3 +1,5 @@
 /Debug/
 /Release/
 /Release_RiscV/
+*.o
+*.a
