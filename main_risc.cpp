@@ -11,6 +11,8 @@
 #include "inter_process.h"
 #include "Debugger.h"
 
+#include "sdcard_spi.h"
+
 #include <string.h>
 
 #include <sys/utsname.h>
@@ -42,6 +44,33 @@ void func_in_user_mode(void)
 	while (1)
 		trap0(DEBUGGER_UPDATE);
 }
+
+struct TransferHeader
+{
+	unsigned int m_size;
+	unsigned int m_entryPoint;
+	unsigned int m_crc;
+} header;
+
+union MagicAndHeader{
+	struct {
+		unsigned int magic;
+		TransferHeader header;
+	} top;
+	unsigned char block[512];
+} s_header;
+
+static_assert(sizeof(header) == 12, "size change");
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+static unsigned int swap32(unsigned int num)
+{
+	return ((num>>24)&0xff) | // move byte 3 to byte 0
+                    ((num<<8)&0xff0000) | // move byte 1 to byte 2
+                    ((num>>8)&0xff00) | // move byte 2 to byte 1
+                    ((num<<24)&0xff000000); // byte 0 to byte 3
+}
+#endif
 
 //from elf/elf.h
 #define AT_NULL		0		/* End of vector */
@@ -91,8 +120,9 @@ typedef struct
 
 
 extern "C" void gdb_elf_load(unsigned long ident, unsigned long ecall, void *pStack);
+extern "C" void sd_elf_load(unsigned long ident, unsigned long ecall, void *pStack, unsigned long entry_point);
 
-void elf_entry(void)
+void elf_gdb_entry(void)
 {
 	//the order matters here
 #define ARGC_BASE 1
@@ -134,11 +164,123 @@ void elf_entry(void)
 	gdb_elf_load(0x09000000, DEBUGGER_UPDATE, &stack);
 }
 
+void elf_sd_entry(void)
+{
+	//the order matters here
+#define ARGC_BASE 1
+#define ARGC_EXTRAS 3
+#define ARGC_NECESSARY 3
+
+	struct the_stack
+	{
+		int m_argc;
+		const char *m_argv[ARGC_BASE + ARGC_EXTRAS + ARGC_NECESSARY];
+		Elf32_auxv_t m_auxvec[3];
+		Elf32_Phdr m_phdr;
+	} stack;
+	
+	stack.m_argc = ARGC_BASE + ARGC_EXTRAS;
+	stack.m_argv[0] = "my_elf";
+	stack.m_argv[1] = "-warp";
+	stack.m_argv[2] = "1";
+	stack.m_argv[3] = "1";
+	stack.m_argv[4] = 0;
+	stack.m_argv[5] = "environment";
+	stack.m_argv[6] = 0;
+	
+	stack.m_auxvec[0] = {AT_PHNUM, {1}};
+	stack.m_auxvec[1] = {AT_PHDR, {(uint32_t)&stack.m_phdr}};
+	stack.m_auxvec[2] = {AT_NULL, {0}};
+	
+	stack.m_phdr.p_type = PT_TLS;
+	stack.m_phdr.p_memsz = 0x00000038;
+	stack.m_phdr.p_filesz = 0x00000010;
+	stack.m_phdr.p_vaddr = 0x101d6c64;
+	stack.m_phdr.p_align = 1 << 2;
+
+#ifdef CONFIG_64BIT
+#error update me
+#endif
+	
+	//reliant on things being pushed into the structure in the correct order
+	sd_elf_load(0x09000000, DEBUGGER_UPDATE, &stack, s_header.top.header.m_entryPoint);
+}
+
 //////////
 
 static Cpu g_cpu;
 static VirtualMemory g_vMem;
 static CpuDebugger g_debugger;
+static SdCard s_sd;
+
+static const unsigned int kBinaryHeaderOffset = 100;
+static const unsigned int kBinaryBlockOffset = 101;
+
+bool initialise_sdcard_and_load_header(SdCard &rSd, MagicAndHeader &rHeader)
+{
+	switch (rSd.Init())
+	{
+		case SdCard::kErrorNoError:
+		{
+			put_string("SD card initialised ok\n");
+
+			rSd.ReadBlock(rHeader.block, kBinaryHeaderOffset);
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+			if (rHeader.top.magic == 0xfecaefbe)
+#else
+			if (rHeader.top.magic == 0xbeefcafe)
+#endif
+			{
+				put_string("header found\n");
+				return true;
+			}
+			else
+			{
+				put_string("magic number does not match; using UART\n");
+			}
+
+			break;
+		}
+
+		case SdCard::kErrorInitTimeout:
+			put_string("SD card init timeout\n");
+			break;
+
+		case SdCard::kErrorCmd8Error:
+			put_string("SD card cmd8 error\n");
+			break;
+
+		
+		case SdCard::kErrorNotSdCard:
+			put_string("not SD card\n");
+			break;
+
+		default:
+			put_string("unknown error\n");
+			break;
+	}
+
+	return false;
+}
+
+void load_binary_sd(SdCard &rSd, unsigned char *pLoadPoint, unsigned int size)
+{
+	put_string("\nloading image\n");
+
+	//round up to the nearest block
+	size = (size + 511) & ~511;
+
+	unsigned int blocks = size >> 9;
+
+	for (unsigned int count = 0; count < blocks; count++)
+	{
+		put_string("\033[2Kblock ");
+		put_hex_num(count);
+		put_string("\n");
+		rSd.ReadBlock(pLoadPoint + count * 512, count + kBinaryBlockOffset);
+	}
+}
 
 static void Trap(ExceptionState *pState)
 {
@@ -240,16 +382,82 @@ static void Trap(ExceptionState *pState)
 			{
 				unsigned int read_count = 0;
 				unsigned char *pBuf = (unsigned char *)a1;
-				volatile unsigned char *pData = (unsigned char *)0x1000508;
-				
-				for (unsigned long count = 0; count < a2; count++)
+
+				unsigned char block[512];
+
+				const unsigned int kDataBlockOffset = 2500;
+
+				//compute block of file position
+				unsigned int file_pos_block = file_pos >> 9;
+				unsigned int file_pos_misalignment = file_pos & 511;
+
+				unsigned int to_read = a2;
+
+				g_debugger.put_string_gdb("read: a1 ");
+				g_debugger.put_hex_num_gdb(a1);
+				g_debugger.put_string_gdb(" a2 ");
+				g_debugger.put_hex_num_gdb(a2);
+				g_debugger.put_string_gdb(" file pos ");
+				g_debugger.put_hex_num_gdb(file_pos);
+
+				if (file_pos_misalignment)
 				{
-					*pBuf++ = *pData;
-					read_count++;
+					//"file_pos_misalignment" bytes is the data that we don't want
+					s_sd.ReadBlock(block, file_pos_block + kDataBlockOffset);
+
+					//find where the end within the current block if we read a2 bytes from the current misalignment
+					unsigned int read_end = file_pos_misalignment + a2;
+					unsigned int read_end_block = read_end > 512 ? 512 : read_end;		//clamp to the end of the block
+
+					unsigned int block_remainder = read_end_block - file_pos_misalignment;
+
+					//load just the bytes we want from this block
+					for (unsigned int count = 0; count < block_remainder; count++)
+					{
+						//ignore the ones at the beginning
+						*pBuf++ = block[file_pos_misalignment + count];
+					}
+
+					read_count += block_remainder;
+					a2 -= block_remainder;
+
+					//data should now be aligned
+					file_pos_block++;
 				}
-				
+
+				while (a2 >= 512)
+				{
+					s_sd.ReadBlock(block, file_pos_block + kDataBlockOffset);
+
+					for (unsigned int count = 0; count < 512; count++)
+					{
+						*pBuf++ = block[count];
+					}
+
+					read_count += 512;
+					a2 -= 512;
+					file_pos_block++;
+				}
+
+				if (a2)
+				{
+					//load the remainder
+					s_sd.ReadBlock(block, file_pos_block + kDataBlockOffset);
+
+					for (unsigned int count = 0; count < a2; count++)
+					{
+						*pBuf++ = block[count];
+					}
+
+					read_count += a2;
+				}
+
+				g_debugger.put_string_gdb(" read finished\n");
+
+				if (read_count != to_read)
+					g_debugger.put_string_gdb("WRONG READ\n");
+
 				file_pos += read_count;
-				
 				a0 = read_count;
 			}
 			else
@@ -352,8 +560,8 @@ static void Trap(ExceptionState *pState)
 				unsigned int time = *pData;
 				timespec *pRet = (timespec *)a1;
 				
-				pRet->tv_sec = time >> 15;
-				pRet->tv_nsec = (time & 32767) * 30517;
+				pRet->tv_sec = time / 50000000;							//50 MHz
+				pRet->tv_nsec = (time - pRet->tv_sec * 50000000) * 20;
 				a0 = 0;
 			}
 			else
@@ -904,7 +1112,7 @@ static void Bus(ExceptionState *pState)
 
 extern "C" void _start(void *pLoadPoint)
 {
-	put_string("in loaded image\n");
+	put_string("in loaded image\nbuilt " __DATE__ " " __TIME__ "\n");
 	enable_icache(true);
 	put_string("instruction cache enabled\n");
 
@@ -944,6 +1152,20 @@ extern "C" void _start(void *pLoadPoint)
 
 	put_string("first DebuggerUpdate\n");
 
+	initialise_sdcard_and_load_header(s_sd, s_header);
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	s_header.top.header.m_size = swap32(s_header.top.header.m_size);
+	s_header.top.header.m_entryPoint = swap32(s_header.top.header.m_entryPoint);
+	s_header.top.header.m_crc = swap32(s_header.top.header.m_crc);
+#endif
+
+	put_string("size "); put_hex_num(s_header.top.header.m_size);
+	put_string("\nentry point "); put_hex_num(s_header.top.header.m_entryPoint);
+	put_string("\ncrc "); put_hex_num(s_header.top.header.m_crc);
+
+	load_binary_sd(s_sd, (unsigned char *)0x101000f4, s_header.top.header.m_size);
+
 	g_debugger.DebuggerUpdate(CpuDebugger::kNotRunning);
 
 	int *p = (int *)(&g_userStack[s_userStackSize - 3 * sizeof(long)]);
@@ -953,5 +1175,6 @@ extern "C" void _start(void *pLoadPoint)
 
 	put_string("calling user mode\n");
 
-	CallUserModeNoReturn(&elf_entry, 0, &g_userStack[s_userStackSize - 3 * sizeof(long)]);
+	// CallUserModeNoReturn(&elf_gdb_entry, 0, &g_userStack[s_userStackSize - 3 * sizeof(long)]);
+	CallUserModeNoReturn(&elf_sd_entry, 0, &g_userStack[s_userStackSize - 3 * sizeof(long)]);
 }
