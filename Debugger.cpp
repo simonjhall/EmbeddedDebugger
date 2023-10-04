@@ -329,6 +329,7 @@ void CpuDebugger::DebuggerUpdate(Reason r)
 				if (do_continue)
 				{
 					SendResponse("+");			//leave function and continue
+					invalidate_icache();
 #ifdef __m68k__
 					//turn off trace mode for a return
 					m_pCpu->SetSR(m_pCpu->GetSR() & ~(1 << 15));
@@ -338,6 +339,7 @@ void CpuDebugger::DebuggerUpdate(Reason r)
 				else if (do_step)
 				{
 					SendResponse("+");
+					invalidate_icache();
 #ifdef __m68k__
 					//turn on trace mode
 					m_pCpu->SetSR(m_pCpu->GetSR() | (1 << 15));
